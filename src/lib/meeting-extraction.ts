@@ -1,3 +1,15 @@
+export const CONFIDENCE_THRESHOLD = 0.65;
+
+/** Auto-select checkboxes on review when confidence is at or above this. */
+export const RECOMMENDED_SELECTION_THRESHOLD = 0.8;
+
+export type ExtractionMode = "openai" | "heuristic";
+
+export type MeetingExtractionApiResponse = MeetingExtractionResult & {
+  extractionMode: ExtractionMode;
+  warning?: string;
+};
+
 export type ExtractedActionItem = {
   title: string;
   owner: string | null;
@@ -7,6 +19,7 @@ export type ExtractedActionItem = {
   hole_or_area: string | null;
   board_relevance: boolean;
   notes: string | null;
+  confidence: number;
 };
 
 export type ExtractedStrategicProject = {
@@ -16,6 +29,7 @@ export type ExtractedStrategicProject = {
   priority_tier: string | null;
   strategic_rationale: string | null;
   notes: string | null;
+  confidence: number;
 };
 
 export type ExtractedTreeItem = {
@@ -32,6 +46,7 @@ export type ExtractedTreeItem = {
   board_status: string | null;
   target_season: string | null;
   notes: string | null;
+  confidence: number;
 };
 
 export type ExtractedCapitalItem = {
@@ -42,6 +57,7 @@ export type ExtractedCapitalItem = {
   priority: "High" | "Medium" | "Low";
   status: string | null;
   notes: string | null;
+  confidence: number;
 };
 
 export type ExtractedMemberFeedback = {
@@ -52,6 +68,7 @@ export type ExtractedMemberFeedback = {
   status: string | null;
   owner: string | null;
   notes: string | null;
+  confidence: number;
 };
 
 export type MeetingExtractionResult = {
@@ -88,28 +105,107 @@ const OWNERS = ["Ryan", "Dwayne", "Mike", "Stacey", "Committee"] as const;
 
 const MIN_SENTENCE_LEN = 18;
 
-const ACTION_PATTERNS = [
-  /will follow up/i,
+const STRONG_ACTION_VERBS = [
   /follow[- ]?up/i,
-  /needs to/i,
-  /need to/i,
+  /\bconfirm\b/i,
+  /\bsend\b/i,
+  /\bschedule\b/i,
+  /\bvote\b/i,
+  /\bapprove\b/i,
+  /\bsubmit\b/i,
+  /\bprepare\b/i,
+  /\breview\b/i,
+  /coordinate/i,
+  /\bcontact\b/i,
+  /\bwrite\b/i,
+  /\border\b/i,
+  /\bbudget\b/i,
+  /add to agenda/i,
+  /\bobtain\b/i,
+  /\bask\b/i,
+];
+
+const ACTION_PATTERNS = [
+  ...STRONG_ACTION_VERBS,
+  /will follow up/i,
   /assigned to/i,
   /action item/i,
-  /\bconfirm\b/i,
-  /\bschedule\b/i,
-  /\bsubmit\b/i,
-  /coordinate/i,
-  /\breview\b/i,
-  /\bobtain\b/i,
-  /\bsend\b/i,
-  /\bprepare\b/i,
   /dwayne will/i,
   /ryan will/i,
   /committee agreed to/i,
   /mike will/i,
   /stacey will/i,
   /next meeting/i,
-  /\baction\b/i,
+];
+
+const VAGUE_PHRASE_PATTERNS = [
+  /need to think/i,
+  /\bwe need to\b/i,
+  /\bi think\b/i,
+  /\bmaybe\b/i,
+  /\bprobably\b/i,
+  /do we want/i,
+  /it would be/i,
+];
+
+const STRONG_STRATEGIC_PATTERNS = [
+  /implementation/i,
+  /sequence/i,
+  /reroute/i,
+  /cart path/i,
+  /tee complex/i,
+  /green expansion/i,
+  /master plan/i,
+  /approval path/i,
+  /member vote/i,
+  /cost range/i,
+];
+
+const WEAK_STRATEGIC_PATTERNS = [
+  /strategic plan is exciting/i,
+  /when we see (?:the )?strategic plan/i,
+  /strategic plan.{0,20}$/i,
+];
+
+const CONCRETE_CAPITAL_PATTERNS = [
+  /\w+\s+mower/i,
+  /fairway mower/i,
+  /rough mower/i,
+  /pump service/i,
+  /irrigation heads?/i,
+  /bunker sand/i,
+  /track mats?/i,
+  /equipment replacement/i,
+  /controller/i,
+  /\$\d/,
+];
+
+const GENERIC_CAPITAL_REJECT = [
+  /whole entire thing/i,
+  /june budget/i,
+  /champagne course on beer budget/i,
+  /doesn'?t cost \w+ that much/i,
+  /^pump this\b/i,
+];
+
+const GENERIC_TREE_REJECT = [
+  /\bthat tree\b/i,
+  /tree health/i,
+  /tree management/i,
+  /\bturf\b/i,
+  /these areas/i,
+];
+
+const STRONG_FEEDBACK_PATTERNS = [
+  /newsletter/i,
+  /town hall/i,
+  /member communication/i,
+  /member survey/i,
+  /complaints?/i,
+  /visibility issue/i,
+  /member education/i,
+  /update members/i,
+  /social media/i,
 ];
 
 const CAPITAL_PATTERNS = [
@@ -173,13 +269,7 @@ const DECISION_PATTERNS = [
   /consensus/i,
 ];
 
-const STRATEGIC_PATTERNS = [
-  /strategic plan/i,
-  /master plan/i,
-  /implementation/i,
-  /sequence/i,
-  /roadmap/i,
-];
+const STRATEGIC_PATTERNS = STRONG_STRATEGIC_PATTERNS;
 
 /** Category priority when picking a single primary (legacy). */
 const CATEGORY_PRIORITY: SentenceCategory[] = [
@@ -214,6 +304,138 @@ export function extractTreeSpecies(sentence: string): string | null {
 
 export function extractBoardRelevance(sentence: string): boolean {
   return sentenceContainsAny(sentence, BOARD_PATTERNS);
+}
+
+function hasStrongActionVerb(sentence: string): boolean {
+  return sentenceContainsAny(sentence, STRONG_ACTION_VERBS);
+}
+
+function isVaguePhrase(sentence: string): boolean {
+  return sentenceContainsAny(sentence, VAGUE_PHRASE_PATTERNS);
+}
+
+export function hasSpecificTreeLocation(sentence: string): boolean {
+  if (extractHoleNumber(sentence) != null) return true;
+  if (/\b(?:hole|#)\s*\d+\b/i.test(sentence) && isTreeEntity(sentence)) {
+    return true;
+  }
+  if (/\b(?:back|behind)\s+(?:of\s+)?\d+\s+green\b/i.test(sentence)) {
+    return true;
+  }
+  if (/\b\d+\s+green\b.*\b(?:tree|oak|removal|corridor)\b/i.test(sentence)) {
+    return true;
+  }
+  if (/\bhole\s*\d+\s+corridor\b/i.test(sentence)) return true;
+  if (
+    /\b(?:permit|removal)\b/i.test(sentence) &&
+    /\b(?:hole|green|corridor|\d+)\b/i.test(sentence)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function passesTreeFilter(sentence: string): boolean {
+  if (sentenceContainsAny(sentence, GENERIC_TREE_REJECT) && !hasSpecificTreeLocation(sentence)) {
+    return false;
+  }
+  if (!isTreeEntity(sentence)) return false;
+  return hasSpecificTreeLocation(sentence);
+}
+
+function passesCapitalFilter(sentence: string): boolean {
+  if (sentenceContainsAny(sentence, GENERIC_CAPITAL_REJECT)) {
+    if (!sentenceContainsAny(sentence, CONCRETE_CAPITAL_PATTERNS)) return false;
+  }
+  return sentenceContainsAny(sentence, CONCRETE_CAPITAL_PATTERNS);
+}
+
+function passesStrategicFilter(sentence: string): boolean {
+  if (sentenceContainsAny(sentence, WEAK_STRATEGIC_PATTERNS)) return false;
+  if (!sentenceContainsAny(sentence, STRONG_STRATEGIC_PATTERNS)) return false;
+  if (
+    /strategic plan/i.test(sentence) &&
+    sentenceScore(sentence, STRONG_STRATEGIC_PATTERNS) < 2
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function passesActionFilter(sentence: string): boolean {
+  if (sentenceContainsAny(sentence, GENERIC_CAPITAL_REJECT)) return false;
+  if (sentenceContainsAny(sentence, GENERIC_TREE_REJECT) && !hasSpecificTreeLocation(sentence)) {
+    return false;
+  }
+
+  const owner = inferOwner(sentence);
+  const strong = hasStrongActionVerb(sentence);
+  const vague = isVaguePhrase(sentence);
+  const hasSignal =
+    strong ||
+    owner != null ||
+    /\bwill\b/i.test(sentence) ||
+    /action item/i.test(sentence);
+
+  if (!hasSignal) return false;
+  if (vague && !(strong && owner)) return false;
+  if (/^we need to\b/i.test(sentence) && !strong) return false;
+  if (/\bbudget\b/i.test(sentence) && !owner && !/\bwill\b/i.test(sentence)) {
+    return false;
+  }
+  return true;
+}
+
+function passesFeedbackFilter(sentence: string): boolean {
+  return sentenceContainsAny(sentence, STRONG_FEEDBACK_PATTERNS);
+}
+
+function clamp01(n: number): number {
+  return Math.max(0, Math.min(1, n));
+}
+
+function scoreActionConfidence(sentence: string): number {
+  if (!passesActionFilter(sentence)) return 0;
+  let s = 0.45;
+  if (inferOwner(sentence)) s += 0.22;
+  if (hasStrongActionVerb(sentence)) s += 0.2;
+  if (extractBoardRelevance(sentence)) s += 0.05;
+  if (isVaguePhrase(sentence)) s -= 0.25;
+  if (/\bwill\b/i.test(sentence) && inferOwner(sentence)) s += 0.08;
+  return clamp01(s);
+}
+
+function scoreTreeConfidence(sentence: string): number {
+  if (!passesTreeFilter(sentence)) return 0;
+  let s = 0.55;
+  if (extractHoleNumber(sentence) != null) s += 0.2;
+  if (extractTreeSpecies(sentence)) s += 0.12;
+  if (/\bremoval\b/i.test(sentence)) s += 0.08;
+  if (extractBoardRelevance(sentence)) s += 0.05;
+  return clamp01(s);
+}
+
+function scoreCapitalConfidence(sentence: string): number {
+  if (!passesCapitalFilter(sentence)) return 0;
+  let s = 0.5;
+  if (/\$\d/.test(sentence)) s += 0.15;
+  if (/\bmower\b/i.test(sentence)) s += 0.18;
+  if (/\breplacement\b/i.test(sentence)) s += 0.1;
+  return clamp01(s);
+}
+
+function scoreStrategicConfidence(sentence: string): number {
+  if (!passesStrategicFilter(sentence)) return 0;
+  let s = 0.55;
+  s += Math.min(0.25, sentenceScore(sentence, STRONG_STRATEGIC_PATTERNS) * 0.08);
+  return clamp01(s);
+}
+
+function scoreFeedbackConfidence(sentence: string): number {
+  if (!passesFeedbackFilter(sentence)) return 0;
+  let s = 0.6;
+  if (/town hall|newsletter/i.test(sentence)) s += 0.12;
+  return clamp01(s);
 }
 
 function titleCasePhrase(phrase: string): string {
@@ -265,7 +487,7 @@ export function compressTreeTitle(sentence: string): string {
   }
 
   if (t.length > 72) {
-    return `${titleCasePhrase(t.slice(0, 71))}…`;
+    return titleCasePhrase(t.slice(0, 72).replace(/\s+\S*$/, "").trim());
   }
 
   return titleCasePhrase(t);
@@ -296,7 +518,7 @@ export function compressCapitalTitle(sentence: string): string {
   if (t.length > 55) {
     const mower = t.match(/\b\w+(?:\s+\w+){0,2}\s+mower\b/i);
     if (mower) return titleCasePhrase(mower[0]);
-    return `${titleCasePhrase(t.slice(0, 54))}…`;
+    return titleCasePhrase(t.slice(0, 55).replace(/\s+\S*$/, "").trim());
   }
   return titleCasePhrase(t);
 }
@@ -380,23 +602,15 @@ export function classifySentenceCategories(
   const categories: SentenceCategory[] = [];
   const boardRelated = extractBoardRelevance(sentence);
 
-  if (isTreeEntity(sentence)) categories.push("tree");
+  if (passesTreeFilter(sentence)) categories.push("tree");
 
-  if (sentenceScore(sentence, CAPITAL_PATTERNS) > 0) {
-    categories.push("capital");
-  }
+  if (passesCapitalFilter(sentence)) categories.push("capital");
 
-  if (sentenceScore(sentence, COMMUNICATION_PATTERNS) > 0) {
-    categories.push("communication");
-  }
+  if (passesFeedbackFilter(sentence)) categories.push("communication");
 
-  if (sentenceScore(sentence, STRATEGIC_PATTERNS) > 0) {
-    categories.push("strategic");
-  }
+  if (passesStrategicFilter(sentence)) categories.push("strategic");
 
-  if (sentenceScore(sentence, ACTION_PATTERNS) > 0) {
-    categories.push("action");
-  }
+  if (passesActionFilter(sentence)) categories.push("action");
 
   if (
     sentenceScore(sentence, DECISION_PATTERNS) > 0 &&
@@ -503,7 +717,7 @@ function inferHoleOrArea(line: string): string | null {
   return null;
 }
 
-function compressTitle(sentence: string, max = 110): string {
+function compressActionTitle(sentence: string, max = 100): string {
   let t = normalizeSentence(sentence);
   const owner = inferOwner(t);
 
@@ -515,14 +729,25 @@ function compressTitle(sentence: string, max = 110): string {
   t = t.replace(/\bneed to\b/i, "to");
   t = t.replace(/\bcommittee agreed to\b/i, "Committee to");
   t = t.replace(/\b(action item|follow[- ]?up):\s*/i, "");
+  t = t.replace(
+    /\bask\s+(\w+)\s+to\s+give\s+a\s+[\w-]*\s*update\s+on\s+the\s+board\b/i,
+    "ask $1 for board update"
+  );
+  t = t.replace(/\bfive to ten minute\b/i, "");
+  t = t.replace(/\s+/g, " ").trim();
 
-  if (owner && !/^(\w+ to)/i.test(t)) {
-    t = `${owner}: ${t}`;
+  if (owner && !/^\w+ to\b/i.test(t)) {
+    t = `${owner} to ${t.replace(new RegExp(`^${owner}\\s*:?\\s*`, "i"), "")}`;
   }
 
-  t = t.replace(/\s+/g, " ").trim();
-  if (t.length > max) t = `${t.slice(0, max - 1)}…`;
+  if (t.length > max) {
+    t = t.slice(0, max).replace(/\s+\S*$/, "").trim();
+  }
   return t;
+}
+
+function compressTitle(sentence: string, max = 110): string {
+  return compressActionTitle(sentence, max);
 }
 
 function bulletLines(lines: string[], formatter: (s: string) => string = compressTitle): string {
@@ -541,7 +766,9 @@ function dedupeByTitle<T extends { title: string }>(items: T[]): T[] {
   });
 }
 
-function buildTreeItemFromSentence(sentence: string): ExtractedTreeItem {
+function buildTreeItemFromSentence(sentence: string): ExtractedTreeItem | null {
+  const confidence = scoreTreeConfidence(sentence);
+  if (confidence < 0.35) return null;
   const hole = extractHoleNumber(sentence);
   const species = extractTreeSpecies(sentence);
   const board_relevant = extractBoardRelevance(sentence);
@@ -561,10 +788,11 @@ function buildTreeItemFromSentence(sentence: string): ExtractedTreeItem {
     board_status: board_relevant ? "Pending" : "Not Required",
     target_season: null,
     notes: null,
+    confidence,
   };
 }
 
-function buildCapitalItemFromSentence(sentence: string): ExtractedCapitalItem {
+function buildCapitalItemFromSentence(sentence: string): ExtractedCapitalItem | null {
   const costMatch = sentence.match(/\$[\d,]+(?:\.\d+)?/);
   let estimated_cost: number | null = null;
   if (costMatch) {
@@ -573,6 +801,9 @@ function buildCapitalItemFromSentence(sentence: string): ExtractedCapitalItem {
 
   const title = compressCapitalTitle(sentence);
   const lower = sentence.toLowerCase();
+
+  const confidence = scoreCapitalConfidence(sentence);
+  if (confidence < 0.35) return null;
 
   return {
     title,
@@ -588,6 +819,7 @@ function buildCapitalItemFromSentence(sentence: string): ExtractedCapitalItem {
     priority: inferPriority(sentence),
     status: "Under Review",
     notes: null,
+    confidence,
   };
 }
 
@@ -601,64 +833,89 @@ function dedupeByTopic<T extends { topic: string }>(items: T[]): T[] {
   });
 }
 
+type SummaryTopic = { label: string; score: number; text: string };
+
+function topicFromSentence(sentence: string): SummaryTopic | null {
+  const lower = sentence.toLowerCase();
+  if (/superintendent|course update|taylor|dwayne.*update/i.test(lower)) {
+    return { label: "superintendent", score: 0.9, text: "Superintendent and course operations update" };
+  }
+  if (passesStrategicFilter(sentence)) {
+    return {
+      label: "strategic",
+      score: 0.85,
+      text: "Strategic plan implementation and approvals",
+    };
+  }
+  if (/family tee|tee complex/i.test(lower)) {
+    return { label: "tees", score: 0.82, text: "Family tees and tee complex planning" };
+  }
+  if (passesTreeFilter(sentence)) {
+    const t = compressTreeTitle(sentence);
+    return { label: "trees", score: 0.8, text: `Tree management: ${t}` };
+  }
+  if (passesCapitalFilter(sentence)) {
+    return {
+      label: "capital",
+      score: 0.78,
+      text: `Capital and equipment: ${compressCapitalTitle(sentence)}`,
+    };
+  }
+  if (passesFeedbackFilter(sentence)) {
+    return {
+      label: "communication",
+      score: 0.75,
+      text: "Member communication and visibility",
+    };
+  }
+  if (/committee membership|new member|greens committee/i.test(lower)) {
+    return { label: "committee", score: 0.7, text: "Greens committee membership and roles" };
+  }
+  return null;
+}
+
 function buildSummaryBullets(
   sentences: string[],
   buckets: Record<string, string[]>
 ): string {
-  const candidates: string[] = [];
+  const topics: SummaryTopic[] = [];
+  const seen = new Set<string>();
 
-  const pick = (arr: string[]) => {
-    for (const s of arr) {
-      if (candidates.length >= 4) break;
-      const t = compressTitle(s, 90);
-      if (!candidates.some((c) => fingerprint(c) === fingerprint(t))) {
-        candidates.push(t);
-      }
-    }
-  };
+  for (const s of sentences) {
+    const t = topicFromSentence(s);
+    if (!t || seen.has(t.label)) continue;
+    seen.add(t.label);
+    topics.push(t);
+  }
 
-  pick(buckets.decision ?? []);
-  pick(buckets.board ?? []);
-  pick(buckets.action ?? []);
-  pick([
-    ...(buckets.capital ?? []),
-    ...(buckets.tree ?? []),
-    ...(buckets.strategic ?? []),
-  ]);
-
-  if (candidates.length < 4) {
-    for (const s of sentences) {
-      if (candidates.length >= 4) break;
-      const t = compressTitle(s, 90);
-      if (!candidates.some((c) => fingerprint(c) === fingerprint(t))) {
-        candidates.push(t);
-      }
+  for (const s of [
+    ...(buckets.action ?? []).filter((x) => scoreActionConfidence(x) >= 0.65),
+    ...(buckets.tree ?? []).filter((x) => scoreTreeConfidence(x) >= 0.65),
+    ...(buckets.capital ?? []).filter((x) => scoreCapitalConfidence(x) >= 0.65),
+  ]) {
+    const t = topicFromSentence(s);
+    if (t && !seen.has(t.label)) {
+      seen.add(t.label);
+      topics.push(t);
     }
   }
 
-  const bullets = candidates.slice(0, 4);
-  const topics = dedupeLines(
-    sentences
-      .filter((s) => classifySentenceCategories(s).categories.length > 0)
-      .map((s) =>
-        isTreeEntity(s) ? compressTreeTitle(s) : compressTitle(s, 80)
-      )
-  ).slice(0, 4);
+  topics.sort((a, b) => b.score - a.score);
+  const bullets = topics.slice(0, 5).map((t) => t.text.replace(/…/g, ""));
 
   const boardNotes = dedupeLines([
     ...(buckets.board ?? []),
-    ...(buckets.decision ?? []).filter((s) =>
-      sentenceContainsAny(s, BOARD_PATTERNS)
-    ),
+    ...(buckets.decision ?? []).filter((s) => extractBoardRelevance(s)),
   ])
-    .map((s) => compressTitle(s, 90))
+    .map((s) => compressActionTitle(s, 85))
+    .filter((t) => t.length > 12 && !t.includes("…"))
     .slice(0, 4);
 
   return `## Draft Summary
-${bullets.map((b) => `- ${b}`).join("\n") || "- TBD"}
+${bullets.map((b) => `- ${b}`).join("\n") || "- Meeting discussion captured; review items below."}
 
 ## Key Discussion Topics
-${topics.map((t) => `- ${t}`).join("\n") || "- TBD"}
+${bullets.map((b) => `- ${b}`).join("\n") || "- TBD"}
 
 ## Board-Relevant Notes
 ${boardNotes.map((b) => `- ${b}`).join("\n") || "- None identified"}`;
@@ -687,7 +944,7 @@ export function extractMeetingIntelligence(
     const { categories, boardRelated } = classifySentenceCategories(sentence);
     const fp = fingerprint(sentence);
 
-    if (isTreeEntity(sentence)) {
+    if (passesTreeFilter(sentence)) {
       const key = treeDedupeKey(sentence);
       if (!treeKeys.has(key)) {
         treeKeys.add(key);
@@ -743,9 +1000,12 @@ export function extractMeetingIntelligence(
 
   const decisions = bulletLines(decisionLines);
 
-  const actionItems = dedupeByTitle(
-    buckets.action.map((sentence) => ({
-      title: compressTitle(sentence),
+  const actionCandidates: ExtractedActionItem[] = [];
+  for (const sentence of buckets.action) {
+    const confidence = scoreActionConfidence(sentence);
+    if (confidence < 0.35) continue;
+    actionCandidates.push({
+      title: compressActionTitle(sentence),
       owner: inferOwner(sentence),
       priority: inferPriority(sentence),
       category: "Operations",
@@ -753,39 +1013,55 @@ export function extractMeetingIntelligence(
       hole_or_area: inferHoleOrArea(sentence),
       board_relevance: extractBoardRelevance(sentence),
       notes: null,
-    }))
-  );
+      confidence,
+    });
+  }
+  const actionItems = dedupeByTitle(actionCandidates);
 
-  const strategicProjects = dedupeByTitle(
-    buckets.strategic.map((sentence) => ({
-      title: compressTitle(sentence),
+  const strategicCandidates: ExtractedStrategicProject[] = [];
+  for (const sentence of buckets.strategic) {
+    const confidence = scoreStrategicConfidence(sentence);
+    if (confidence < 0.35) continue;
+    strategicCandidates.push({
+      title: compressActionTitle(sentence, 90),
       hole_or_area: inferHoleOrArea(sentence),
       category: "Strategic Plan",
       priority_tier: null,
-      strategic_rationale: compressTitle(sentence, 200),
+      strategic_rationale: compressActionTitle(sentence, 120),
       notes: null,
-    }))
-  );
+      confidence,
+    });
+  }
+  const strategicProjects = dedupeByTitle(strategicCandidates);
 
   const treeItems = dedupeByTitle(
-    buckets.tree.map((sentence) => buildTreeItemFromSentence(sentence))
+    buckets.tree
+      .map((sentence) => buildTreeItemFromSentence(sentence))
+      .filter((x): x is ExtractedTreeItem => x != null)
   );
 
   const capitalItems = dedupeByTitle(
-    buckets.capital.map((sentence) => buildCapitalItemFromSentence(sentence))
+    buckets.capital
+      .map((sentence) => buildCapitalItemFromSentence(sentence))
+      .filter((x): x is ExtractedCapitalItem => x != null)
   );
 
-  const memberFeedback = dedupeByTopic(
-    buckets.communication.map((sentence) => ({
-      topic: compressTitle(sentence, 80),
+  const feedbackCandidates: ExtractedMemberFeedback[] = [];
+  for (const sentence of buckets.communication) {
+    const confidence = scoreFeedbackConfidence(sentence);
+    if (confidence < 0.35) continue;
+    feedbackCandidates.push({
+      topic: compressActionTitle(sentence, 80),
       category: "Member Communication",
-      feedback_text: compressTitle(sentence, 200),
+      feedback_text: compressActionTitle(sentence, 120),
       source: null,
       status: "Open",
       owner: inferOwner(sentence),
       notes: null,
-    }))
-  );
+      confidence,
+    });
+  }
+  const memberFeedback = dedupeByTopic(feedbackCandidates);
 
   const summary = buildSummaryBullets(sentences, buckets);
 

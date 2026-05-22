@@ -25,6 +25,8 @@ Standalone web app for Merion Cricket Club greens committee operations: meetings
 
    Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and optionally `SUPABASE_SERVICE_ROLE_KEY` for server-only admin tasks later.
 
+   For **LLM meeting extraction** (recommended for real transcripts), set `OPENAI_API_KEY` in `.env.local`. Without it, the app uses a conservative heuristic fallback only.
+
 3. Apply the database schema in the Supabase SQL Editor: open `supabase/migrations/001_initial_schema.sql`, paste, and run.
 
 4. Start the dev server:
@@ -53,7 +55,7 @@ Standalone web app for Merion Cricket Club greens committee operations: meetings
 
 1. Push this app to its own Git repository (standalone from other projects).
 2. Import the repo in Vercel → New Project.
-3. Set environment variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` if you use it.
+3. Set environment variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` if you use it, and **`OPENAI_API_KEY`** for LLM meeting extraction on Vercel.
 4. Deploy. Ensure Supabase Auth redirect URLs include your production origin (e.g. `https://your-app.vercel.app/auth/callback`) if you enable OAuth later.
 
 ## Stack
