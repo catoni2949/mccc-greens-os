@@ -315,11 +315,20 @@ export default function ActionsPage() {
             <tbody className="divide-y divide-slate-100">
               {filtered.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50">
-                  <td
-                    className="cursor-pointer px-4 py-3 font-medium text-slate-900"
-                    onClick={() => openEdit(item)}
-                  >
-                    {item.title}
+                  <td className="px-4 py-3 font-medium text-slate-900">
+                    <Link
+                      href={`/actions/${item.id}`}
+                      className="text-green-700 hover:underline"
+                    >
+                      {item.title}
+                    </Link>
+                    <button
+                      type="button"
+                      className="ml-2 text-xs text-slate-400 hover:text-slate-600"
+                      onClick={() => openEdit(item)}
+                    >
+                      Edit
+                    </button>
                     {item.board_relevance && (
                       <span className="ml-2 text-xs text-red-600">Board</span>
                     )}

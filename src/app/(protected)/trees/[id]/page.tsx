@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/lib/status-badge";
+import { RelatedHistoryPanel } from "@/components/operational-memory/related-history-panel";
 import type { ActionItem, TreeItem } from "@/lib/database.types";
 
 export default async function TreeDetailPage({
@@ -93,6 +94,17 @@ export default async function TreeDetailPage({
         )}
       </div>
 
+      <div className="mt-6">
+        <RelatedHistoryPanel
+          context={{
+            entityType: "tree",
+            entityId: item.id,
+            title: item.title,
+            hole_or_area: item.hole_or_area,
+          }}
+        />
+      </div>
+
       <div className="mt-6 rounded-xl border border-slate-100 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
           Related action items
@@ -104,7 +116,7 @@ export default async function TreeDetailPage({
             {relatedActions.map((a) => (
               <li key={a.id} className="py-3 first:pt-0">
                 <Link
-                  href="/actions"
+                  href={`/actions/${a.id}`}
                   className="font-medium text-green-700 hover:underline"
                 >
                   {a.title}

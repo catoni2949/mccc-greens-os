@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { MeetingCommandCenter } from "@/components/meetings/meeting-command-center";
+import { RelatedHistoryPanel } from "@/components/operational-memory/related-history-panel";
+import { MeetingPrepPanel } from "@/components/operational-memory/meeting-prep-panel";
+import { buildBoardPacketMarkdown } from "@/lib/operational-memory/board-packet";
 import type { ActionItem, FileRecord, Meeting, StrategicProject } from "@/lib/database.types";
 
 export default async function MeetingDetailPage({
@@ -54,6 +57,22 @@ export default async function MeetingDetailPage({
     linkedViaActions = (data ?? []) as StrategicProject[];
   }
 
+  const boardPacketMarkdown = await buildBoardPacketMarkdown(supabase, meeting.id);
+
+  const memorySlots = (
+    <>
+      <MeetingPrepPanel meetingId={meeting.id} />
+      <RelatedHistoryPanel
+        context={{
+          entityType: "meeting",
+          entityId: meeting.id,
+          title: meeting.title,
+          category: meeting.meeting_type,
+        }}
+      />
+    </>
+  );
+
   return (
     <MeetingCommandCenter
       meeting={meeting}
@@ -61,6 +80,8 @@ export default async function MeetingDetailPage({
       files={files}
       sourcedProjects={sourcedProjects}
       linkedViaActions={linkedViaActions}
+      memorySlots={memorySlots}
+      boardPacketMarkdown={boardPacketMarkdown}
     />
   );
 }

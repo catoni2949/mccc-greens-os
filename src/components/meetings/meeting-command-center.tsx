@@ -22,6 +22,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { MeetingFilesPanel } from "@/components/meetings/meeting-files-panel";
 import { MeetingFollowUpPacket } from "@/components/meetings/meeting-follow-up-packet";
+import { BoardPacketGenerator } from "@/components/operational-memory/board-packet-generator";
 import { ActionItemForm } from "@/components/actions/action-item-form";
 import { StatCard } from "@/components/panel-card";
 import {
@@ -40,6 +41,7 @@ const tabs = [
   "Linked Projects",
   "Files",
   "Follow-up Packet",
+  "Board Packet",
 ] as const;
 
 function decisionsCount(decisions: string | null | undefined): number {
@@ -53,12 +55,16 @@ export function MeetingCommandCenter({
   files,
   sourcedProjects,
   linkedViaActions,
+  memorySlots,
+  boardPacketMarkdown,
 }: {
   meeting: Meeting;
   actionItems: ActionItem[];
   files: FileRecord[];
   sourcedProjects: StrategicProject[];
   linkedViaActions: StrategicProject[];
+  memorySlots?: React.ReactNode;
+  boardPacketMarkdown?: string;
 }) {
   const [tab, setTab] = useState<(typeof tabs)[number]>("Overview");
   const [actionItems, setActionItems] = useState(initialActions);
@@ -180,7 +186,14 @@ export function MeetingCommandCenter({
             variant="outline"
             onClick={() => setTab("Follow-up Packet")}
           >
-            Generate follow-up packet
+            Follow-up packet
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setTab("Board Packet")}
+          >
+            Generate board packet
           </Button>
           <Link
             href={`/meetings/${meeting.id}/extract`}
@@ -272,6 +285,7 @@ export function MeetingCommandCenter({
               Transcript intake
             </Link>
           </div>
+          {memorySlots ? <div className="space-y-4 pt-2">{memorySlots}</div> : null}
         </div>
       )}
 
@@ -504,6 +518,19 @@ export function MeetingCommandCenter({
           actionItems={actionItems}
           linkedProjects={linkedProjects}
         />
+      )}
+
+      {tab === "Board Packet" && (
+        <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm">
+          <h2 className="mb-2 text-lg font-semibold text-slate-900">Board packet</h2>
+          <p className="mb-4 text-sm text-slate-600">
+            Executive-ready markdown from this meeting and open committee records.
+          </p>
+          <BoardPacketGenerator
+            meetingId={meeting.id}
+            initialMarkdown={boardPacketMarkdown ?? ""}
+          />
+        </div>
       )}
 
       <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>

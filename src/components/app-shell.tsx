@@ -13,6 +13,9 @@ import {
   MessageSquare,
   LogOut,
   Menu,
+  History,
+  Crown,
+  BookOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -40,6 +43,9 @@ const navItems = [
   { href: "/capital", label: "Capital", icon: DollarSign },
   { href: "/committee", label: "Committee", icon: Users },
   { href: "/communications", label: "Communications", icon: MessageSquare },
+  { href: "/timeline", label: "Timeline", icon: History },
+  { href: "/chair", label: "Chair", icon: Crown },
+  { href: "/governance", label: "Governance", icon: BookOpen },
 ] as const;
 
 const mobileNavItems = navItems.slice(0, 5);

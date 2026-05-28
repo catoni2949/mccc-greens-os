@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { PriorityBadge, StatusBadge } from "@/lib/status-badge";
+import { RelatedHistoryPanel } from "@/components/operational-memory/related-history-panel";
 import type { ActionItem, CapitalItem } from "@/lib/database.types";
 
 function formatMoney(n: number | null) {
@@ -60,6 +61,17 @@ export default async function CapitalDetailPage({
           Edit
         </Link>
       </div>
+      <div className="mb-6">
+        <RelatedHistoryPanel
+          context={{
+            entityType: "capital",
+            entityId: item.id,
+            title: item.title,
+            category: item.item_type,
+          }}
+        />
+      </div>
+
       <div className="rounded-xl border border-slate-100 bg-white p-6 shadow-sm">
         <dl className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -114,7 +126,7 @@ export default async function CapitalDetailPage({
             {relatedActions.map((a) => (
               <li key={a.id} className="py-3 first:pt-0">
                 <Link
-                  href="/actions"
+                  href={`/actions/${a.id}`}
                   className="font-medium text-green-700 hover:underline"
                 >
                   {a.title}

@@ -5,6 +5,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { StatusBadge } from "@/lib/status-badge";
 import { Badge } from "@/components/ui/badge";
+import { RelatedHistoryPanel } from "@/components/operational-memory/related-history-panel";
 import type { ActionItem, StrategicProject } from "@/lib/database.types";
 
 export default async function StrategicProjectDetailPage({
@@ -76,6 +77,18 @@ export default async function StrategicProjectDetailPage({
         </Link>
       </div>
 
+      <div className="mb-6">
+        <RelatedHistoryPanel
+          context={{
+            entityType: "strategic",
+            entityId: project.id,
+            title: project.title,
+            hole_or_area: project.hole_or_area,
+            category: project.category,
+          }}
+        />
+      </div>
+
       <div className="mb-6 rounded-xl border border-slate-100 bg-white p-6 shadow-sm">
         <dl className="grid gap-4 sm:grid-cols-2">
           {fields.map(({ label, value }) => (
@@ -139,7 +152,7 @@ export default async function StrategicProjectDetailPage({
             {actionItems.map((a) => (
               <li key={a.id} className="py-3 first:pt-0">
                 <Link
-                  href="/actions"
+                  href={`/actions/${a.id}`}
                   className="font-medium text-green-700 hover:underline"
                 >
                   {a.title}

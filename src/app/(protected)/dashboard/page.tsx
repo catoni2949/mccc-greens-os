@@ -119,12 +119,26 @@ export default async function DashboardPage() {
     <div>
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <PageHeader title="Dashboard" />
-        <Link
-          href="/search"
-          className={cn(buttonVariants({ variant: "outline" }))}
-        >
-          Global search
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/search"
+            className={cn(buttonVariants({ variant: "outline" }))}
+          >
+            Global search
+          </Link>
+          <Link
+            href="/timeline"
+            className={cn(buttonVariants({ variant: "outline" }))}
+          >
+            Timeline
+          </Link>
+          <Link
+            href="/chair"
+            className={cn(buttonVariants({ variant: "outline" }))}
+          >
+            Chair center
+          </Link>
+        </div>
       </div>
 
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-4">

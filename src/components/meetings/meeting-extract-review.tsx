@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { MergeSuggestionsPanel } from "@/components/meetings/merge-suggestions-panel";
+import { mentionKeyFromTitle } from "@/lib/operational-memory/text-similarity";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -245,10 +247,29 @@ export function MeetingExtractReview({ meeting }: { meeting: Meeting }) {
       }
     }
 
+    await persistOperationalMemory(supabase, meeting.id, {
+      actions: selectedActions,
+      projects: selectedProjects,
+      trees: selectedTrees,
+      capital: selectedCapital,
+      feedback: selectedFeedback,
+    });
+
     toast.success("Selected items created");
     router.push(`/meetings/${meeting.id}`);
     setSaving(false);
   }
+
+  const mergeCandidates = useMemo(() => {
+    if (!hasRun) return [];
+    const items: { entityType: "action" | "tree" | "strategic" | "capital"; title: string }[] =
+      [];
+    for (const a of actions) items.push({ entityType: "action", title: a.title });
+    for (const p of projects) items.push({ entityType: "strategic", title: p.title });
+    for (const t of trees) items.push({ entityType: "tree", title: t.title });
+    for (const c of capital) items.push({ entityType: "capital", title: c.title });
+    return items;
+  }, [hasRun, actions, projects, trees, capital]);
 
   return (
     <div className="space-y-6">
@@ -284,6 +305,8 @@ export function MeetingExtractReview({ meeting }: { meeting: Meeting }) {
               {extractionWarning ? ` — ${extractionWarning}` : null}
             </p>
           </div>
+
+          <MergeSuggestionsPanel items={mergeCandidates} />
 
           <Card title="Summary">
             <Textarea
@@ -608,6 +631,76 @@ function GroupedSuggestions<T extends { confidence: number }>({
       )}
     </section>
   );
+}
+
+async function persistOperationalMemory(
+  supabase: ReturnType<typeof createClient>,
+  meetingId: string,
+  selected: {
+    actions: { title: string; board_relevance: boolean }[];
+    projects: { title: string }[];
+    trees: { title: string; board_relevant?: boolean }[];
+    capital: { title: string }[];
+    feedback: { topic: string }[];
+  }
+) {
+  const mentions: {
+    meeting_id: string;
+    entity_type: string;
+    mention_key: string;
+    mention_label: string;
+    board_relevant: boolean;
+  }[] = [];
+
+  const add = (entityType: string, label: string, board = false) => {
+    mentions.push({
+      meeting_id: meetingId,
+      entity_type: entityType,
+      mention_key: mentionKeyFromTitle(label),
+      mention_label: label,
+      board_relevant: board,
+    });
+  };
+
+  for (const a of selected.actions) add("action_item", a.title, a.board_relevance);
+  for (const p of selected.projects) add("strategic_project", p.title);
+  for (const t of selected.trees) add("tree_item", t.title, t.board_relevant);
+  for (const c of selected.capital) add("capital_item", c.title);
+  for (const f of selected.feedback) add("member_feedback", f.topic);
+
+  if (mentions.length) {
+    await supabase.from("discussion_mentions").insert(mentions);
+  }
+
+  for (const label of [
+    ...selected.actions.map((a) => a.title),
+    ...selected.trees.map((t) => t.title),
+    ...selected.capital.map((c) => c.title),
+  ]) {
+    const topic_key = mentionKeyFromTitle(label);
+    const { data: existing } = await supabase
+      .from("meeting_topics")
+      .select("id, discussion_count")
+      .eq("meeting_id", meetingId)
+      .eq("topic_key", topic_key)
+      .maybeSingle();
+
+    if (existing) {
+      await supabase
+        .from("meeting_topics")
+        .update({
+          discussion_count: (existing.discussion_count ?? 1) + 1,
+          last_discussed_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+    } else {
+      await supabase.from("meeting_topics").insert({
+        meeting_id: meetingId,
+        topic_key,
+        topic_label: label,
+      });
+    }
+  }
 }
 
 function IncludeRow({
