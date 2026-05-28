@@ -105,7 +105,19 @@ export function MeetingCommandCenter({
       return;
     }
     toast.success("Saved");
-    if (field === "raw_transcript") setEditingTranscript(false);
+    if (field === "raw_transcript") {
+      setEditingTranscript(false);
+      void fetch("/api/governance/auto-synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "transcript_saved",
+          meetingId: meeting.id,
+          text: value,
+          hasTranscript: true,
+        }),
+      }).catch(() => undefined);
+    }
     setSavingField(null);
   }
 

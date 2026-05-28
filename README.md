@@ -1,6 +1,6 @@
 # MCCC Greens OS
 
-Standalone web app for Merion Cricket Club greens committee operations: meetings, actions, strategic plan, trees, capital, committee roster, and communications.
+Standalone web app for Merion Cricket Club greens committee operations: meetings, actions, strategic plan, trees, capital, committee roster, governance, and institutional continuity.
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@ Standalone web app for Merion Cricket Club greens committee operations: meetings
 
 ## Local setup
 
-1. Clone or copy this project and install dependencies:
+1. Install dependencies:
 
    ```bash
    cd mccc-greens-os
@@ -23,48 +23,64 @@ Standalone web app for Merion Cricket Club greens committee operations: meetings
    cp .env.local.example .env.local
    ```
 
-   Set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and optionally `SUPABASE_SERVICE_ROLE_KEY` for server-only admin tasks later.
+   Required for the app:
 
-   For **LLM meeting extraction** (recommended for real transcripts), set `OPENAI_API_KEY` in `.env.local`. Without it, the app uses a conservative heuristic fallback only.
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
-3. Apply the database schema in the Supabase SQL Editor: open `supabase/migrations/001_initial_schema.sql`, paste, and run.
+   Recommended:
 
-4. Start the dev server:
+   - `OPENAI_API_KEY` — LLM meeting extraction and governance synthesis
+   - `SUPABASE_DB_URL` — **server-only** Postgres URI for in-app migrations (see below)
+
+3. **Automatic database setup (recommended)**
+
+   Add `SUPABASE_DB_URL` to `.env.local` (Supabase → Project Settings → Database → connection string URI, mode: session or transaction).
+
+   Start the app:
 
    ```bash
    npm run dev
    ```
 
-   Open [http://localhost:3000](http://localhost:3000). Unauthenticated users are sent to `/login`.
+   Sign in, then open **Governance → System setup** (`/admin/setup`):
 
-## Supabase setup checklist
+   - Click **Run pending migrations**
+   - Click **Run governance seeds**
+   - Click **Verify database**
 
-1. **Auth — disable email confirmation**  
-   In Supabase: Authentication → Providers → Email → turn off “Confirm email”. Users created in the dashboard can sign in immediately with password.
+   No manual SQL copy/paste in the Supabase SQL editor is required when `SUPABASE_DB_URL` is set.
 
-2. **Run migration**  
-   Execute `supabase/migrations/001_initial_schema.sql` in the SQL Editor (creates tables, `updated_at` triggers, and `handle_new_user` on `auth.users`).
+4. **Manual setup (fallback)**
 
-3. **Storage bucket**  
-   Create a bucket named `mccc-greens`. Policy: authenticated users can read and write objects in that bucket (adjust RLS policies as needed for production).
+   If you do not set `SUPABASE_DB_URL`, run files in `supabase/migrations/` in order in the Supabase SQL Editor, then run `seed_governance_bible_framework.sql`.
 
-4. **First admin user**  
-   Authentication → Users → Add user (email + password). No in-app sign-up; additional users are created the same way. A `profiles` row is created automatically on signup via the trigger.
+5. Open [http://localhost:3000](http://localhost:3000). Unauthenticated users are sent to `/login`.
+
+## Supabase checklist
+
+1. **Auth** — disable email confirmation if you want immediate password login for dashboard-created users.
+2. **Storage** — bucket `mccc-greens` for meeting files (authenticated read/write).
+3. **First user** — Authentication → Users → Add user. `profiles` row is created via trigger.
 
 ## Vercel deploy
 
-1. Push this app to its own Git repository (standalone from other projects).
-2. Import the repo in Vercel → New Project.
-3. Set environment variables: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` if you use it, and **`OPENAI_API_KEY`** for LLM meeting extraction on Vercel.
-4. Deploy. Ensure Supabase Auth redirect URLs include your production origin (e.g. `https://your-app.vercel.app/auth/callback`) if you enable OAuth later.
+1. Push to Git and import in Vercel.
+2. Set environment variables:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `OPENAI_API_KEY`
+   - **`SUPABASE_DB_URL`** (server-only; required for `/admin/setup` migrations)
+3. Deploy.
+4. Sign in → **`/admin/setup`** → Run pending migrations → Run governance seeds → Verify database.
+
+## Automatic governance updates
+
+After transcripts are saved, extraction is applied, or backfill is approved, the app runs **targeted** governance synthesis (a few relevant Bible sections—not all 18). Full synthesis is available from System setup.
 
 ## Stack
 
-- Next.js 14 (App Router), TypeScript, `src/` directory, `@/*` imports
-- Tailwind CSS, shadcn/ui (slate, CSS variables)
-- Supabase (`@supabase/ssr`) for auth and future data
-- lucide-react icons
-
-## Current scope
-
-Scaffold, schema migration, login, protected app shell with navigation, and placeholder pages. Data lists, forms, and dashboard content are planned for the next build.
+- Next.js 14 (App Router), TypeScript, Tailwind, shadcn/ui
+- Supabase (`@supabase/ssr`)
+- OpenAI for extraction and synthesis
+- `postgres` package for server-side migration runner

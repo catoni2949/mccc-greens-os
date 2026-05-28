@@ -21,6 +21,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { POST_CREATE_KEY } from "@/lib/meetings/post-create";
+import type { PostCreatePayload } from "@/components/meetings/meeting-complete-client";
 
 type WithInclude<T> = T & { included: boolean };
 
@@ -255,8 +257,65 @@ export function MeetingExtractReview({ meeting }: { meeting: Meeting }) {
       feedback: selectedFeedback,
     });
 
-    toast.success("Selected items created");
-    router.push(`/meetings/${meeting.id}`);
+    let synthesis: {
+      sectionTitles?: string[];
+      skipped?: boolean;
+      reason?: string;
+    } = {};
+    try {
+      const synRes = await fetch("/api/governance/auto-synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: "meeting_extract",
+          meetingId: meeting.id,
+          text: [summary, decisions].join("\n"),
+          actionTitles: selectedActions.map((a) => a.title),
+          treeTitles: selectedTrees.map((t) => t.title),
+          projectTitles: selectedProjects.map((p) => p.title),
+          capitalTitles: selectedCapital.map((c) => c.title),
+          feedbackTopics: selectedFeedback.map((f) => f.topic),
+          hasBoardRelevance: selectedActions.some((a) => a.board_relevance),
+        }),
+      });
+      synthesis = await synRes.json();
+    } catch {
+      /* non-blocking */
+    }
+
+    const postPayload: PostCreatePayload = {
+      created: {
+        actions: selectedActions.length,
+        projects: selectedProjects.length,
+        trees: selectedTrees.length,
+        capital: selectedCapital.length,
+        feedback: selectedFeedback.length,
+      },
+      operationalMemoryUpdated: true,
+      bibleSectionsUpdated: synthesis.sectionTitles ?? [],
+      synthesisSkipped: synthesis.skipped,
+      synthesisReason: synthesis.reason,
+      nextSteps: [
+        "Review board-prep flags on new actions",
+        "Open Chair command center for priorities",
+        synthesis.sectionTitles?.length
+          ? `Read updated Bible: ${synthesis.sectionTitles.slice(0, 3).join(", ")}`
+          : "Run full synthesis from System setup when ready",
+      ],
+    };
+    sessionStorage.setItem(
+      `${POST_CREATE_KEY}_${meeting.id}`,
+      JSON.stringify(postPayload)
+    );
+
+    if (synthesis.sectionTitles?.length) {
+      toast.success(
+        `Created · Bible updated: ${synthesis.sectionTitles.join(", ")}`
+      );
+    } else {
+      toast.success("Operational memory updated");
+    }
+    router.push(`/meetings/${meeting.id}/complete`);
     setSaving(false);
   }
 

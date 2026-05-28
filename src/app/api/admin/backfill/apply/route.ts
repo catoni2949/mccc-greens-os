@@ -25,7 +25,31 @@ export async function POST(request: Request) {
 
   try {
     const result = await applyBackfillSelections(supabase, payload);
-    return NextResponse.json({ ok: true, ...result });
+    const { runTargetedGovernanceSynthesis } = await import(
+      "@/lib/governance/auto-synthesis"
+    );
+    const actions = payload.actionItems?.filter((a) => a.included) ?? [];
+    const synthesis = await runTargetedGovernanceSynthesis(supabase, {
+      source: "backfill_applied",
+      text: payload.rawSourceText ?? "",
+      actionTitles: actions.map((a) => a.title),
+      treeTitles: payload.treeItems?.filter((t) => t.included).map((t) => t.title),
+      projectTitles: payload.strategicProjects
+        ?.filter((p) => p.included)
+        .map((p) => p.title),
+      capitalTitles: payload.capitalItems
+        ?.filter((c) => c.included)
+        .map((c) => c.title),
+      feedbackTopics: payload.memberFeedback
+        ?.filter((f) => f.included)
+        .map((f) => f.topic),
+      hasBoardRelevance: actions.some((a) => a.board_relevance),
+    });
+    return NextResponse.json({
+      ok: true,
+      ...result,
+      governance: synthesis,
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Apply failed";
     return NextResponse.json({ error: message }, { status: 500 });

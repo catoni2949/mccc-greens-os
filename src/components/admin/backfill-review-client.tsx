@@ -209,9 +209,16 @@ export function BackfillReviewClient() {
       toast.error(data.error ?? "Apply failed");
       return;
     }
-    toast.success(
-      `Applied: ${data.created} created, ${data.linked} linked to existing`
-    );
+    const gov = data.governance as { sectionTitles?: string[] } | undefined;
+    if (gov?.sectionTitles?.length) {
+      toast.success(
+        `Applied · Bible sections: ${gov.sectionTitles.join(", ")}`
+      );
+    } else {
+      toast.success(
+        `Applied: ${data.created} created, ${data.linked} linked to existing`
+      );
+    }
     sessionStorage.removeItem(BACKFILL_SESSION_KEY);
     router.push("/governance");
   }
